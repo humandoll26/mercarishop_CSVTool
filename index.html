@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メルカリShops 下書き商品CSV生成ツール</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero card">
+      <div>
+        <p class="eyebrow">Mercari Shops Draft Builder</p>
+        <h1>メルカリShops 下書き商品CSV生成ツール</h1>
+        <p class="hero-copy">複数商品の下書きデータをローカルでまとめて入力し、CSVとして出力するためのツールです。</p>
+        <p class="danger-note">CSVで非公開の商品下書きを一括登録し、あとで管理画面上で画像や詳細を仕上げる運用を想定しています。</p>
+      </div>
+    </header>
+
+    <main class="main-column">
+      <section class="card section-card">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Step 1</p>
+            <h2>商品レコードを管理する</h2>
+          </div>
+          <p>商品を追加し、左の一覧から編集中のレコードを切り替えます。</p>
+        </div>
+        <div class="records-layout">
+          <aside class="records-panel">
+            <div class="records-toolbar">
+              <button id="addRecordButton" type="button" class="secondary-button">新規追加</button>
+              <button id="duplicateRecordButton" type="button" class="secondary-button">複製</button>
+              <button id="deleteRecordButton" type="button" class="ghost-button">削除</button>
+              <button id="clearRecordsButton" type="button" class="ghost-button">全削除</button>
+            </div>
+            <div id="recordList" class="record-list" aria-live="polite"></div>
+          </aside>
+
+          <div class="record-editor">
+            <div class="section-head section-head-inline">
+              <div>
+                <p class="section-kicker">Step 2</p>
+                <h2>選択中の商品を入力する</h2>
+              </div>
+              <div class="section-actions">
+                <button id="sampleButton" type="button" class="secondary-button">サンプル投入</button>
+                <button id="resetButton" type="button" class="ghost-button">この商品を初期化</button>
+              </div>
+            </div>
+
+            <div class="draft-banner">
+              <strong>編集中</strong>
+              <span id="currentRecordLabel">商品 1 を編集中です。</span>
+            </div>
+
+            <div class="form-grid">
+              <label class="field span-2">
+                <span>商品名 <span class="required-badge">必須</span></span>
+                <input id="productName" type="text" maxlength="120" placeholder="例: 昭和レトロ ガラス皿 青">
+              </label>
+              <label class="field">
+                <span>販売価格 <span class="required-badge">必須</span></span>
+                <input id="price" type="number" min="0" step="1" inputmode="numeric" placeholder="例: 1800">
+              </label>
+              <label class="field span-4">
+                <span>商品説明</span>
+                <textarea id="description" rows="5" maxlength="3000" placeholder="商品の説明を入力"></textarea>
+              </label>
+
+              <div class="search-card span-2">
+                <div class="search-head">
+                  <span>カテゴリID <span class="required-badge">必須</span></span>
+                  <div class="inline-tools">
+                    <input id="categoryFileInput" class="hidden-file-input" type="file" accept=".csv,text/csv">
+                    <button id="categoryLoadButton" type="button" class="secondary-button inline-open-button">開く</button>
+                    <span id="categoryMasterStatus" class="master-status-badge is-ng">NG</span>
+                  </div>
+                </div>
+                <small id="categorySearchHint">カテゴリCSVを開くと検索できます。</small>
+                <input id="categorySearch" type="text" placeholder="カテゴリID / カテゴリ名 / フルパス名で検索">
+                <div id="categoryQuickResults" class="result-list category-quick-results" aria-live="polite"></div>
+                <div class="category-hierarchy-card">
+                  <div class="category-hierarchy-head">
+                    <strong>階層選択</strong>
+                    <div class="inline-tools">
+                      <small>上位カテゴリから順番に選択</small>
+                      <button id="clearCategoryButton" type="button" class="ghost-button inline-clear-button">カテゴリをクリア</button>
+                    </div>
+                  </div>
+                  <div id="categoryHierarchy" class="category-hierarchy" aria-live="polite"></div>
+                </div>
+                <div class="selected-view">
+                  <strong>選択中カテゴリ</strong>
+                  <span id="categorySelection">未選択</span>
+                </div>
+              </div>
+
+              <div class="search-card span-2">
+                <div class="search-head">
+                  <span>ブランド検索 <span class="optional-badge">任意</span></span>
+                  <div class="inline-tools">
+                    <input id="brandFileInput" class="hidden-file-input" type="file" accept=".csv,text/csv">
+                    <button id="brandLoadButton" type="button" class="secondary-button inline-open-button">開く</button>
+                    <span id="brandMasterStatus" class="master-status-badge is-ng">NG</span>
+                  </div>
+                </div>
+                <small id="brandSearchHint">ブランドCSVを開くと検索できます。</small>
+                <input id="brandSearch" type="text" placeholder="ブランドID / ブランド名 / カナ / 英字名で検索">
+                <div class="selected-view">
+                  <strong>選択中ブランド</strong>
+                  <span id="brandSelection">未選択</span>
+                </div>
+                <div id="brandResults" class="result-list" aria-live="polite"></div>
+              </div>
+
+              <label class="field">
+                <span>商品の状態 <span class="required-badge">必須</span></span>
+                <select id="condition"></select>
+              </label>
+              <label class="field">
+                <span>配送方法 <span class="required-badge">必須</span></span>
+                <select id="shippingMethod"></select>
+              </label>
+              <label class="field">
+                <span>発送元の地域 <span class="required-badge">必須</span></span>
+                <select id="prefecture"></select>
+              </label>
+              <label class="field">
+                <span>発送までの日数 <span class="required-badge">必須</span></span>
+                <select id="shipDays"></select>
+              </label>
+              <label class="field">
+                <span>商品ステータス <span class="required-badge">必須</span></span>
+                <select id="status"></select>
+              </label>
+              <label class="field">
+                <span>配送料の負担 <span class="required-badge">必須</span></span>
+                <select id="shippingPayer"></select>
+              </label>
+              <label class="field">
+                <span>送料ID</span>
+                <input id="shippingFeeId" type="text" maxlength="40" placeholder="例: fee-standard-01">
+                <small id="shippingFeeHint" class="field-help">現在の設定では送料IDを使用できます。</small>
+              </label>
+              <label class="field">
+                <span>メルカリBiz配送_クール区分</span>
+                <select id="coolType"></select>
+                <small id="coolTypeHint" class="field-help">現在の設定ではクール区分を使用できます。</small>
+              </label>
+            </div>
+
+            <div class="subsection-head">
+              <h3>SKU</h3>
+              <p>必要なら SKU1 の在庫数、商品管理コード、JANコードを入力します。</p>
+            </div>
+            <div class="simple-sku-box">
+              <div class="sku-inline-grid">
+                <label class="field">
+                  <span>SKU1_在庫数 <span class="required-badge">必須</span></span>
+                  <input id="sku1Stock" type="text" inputmode="numeric" placeholder="例: 1">
+                </label>
+                <label class="field">
+                  <span>SKU1_商品管理コード <span class="optional-badge">任意</span></span>
+                  <input id="sku1Code" type="text" maxlength="100" placeholder="例: glass-blue-001">
+                </label>
+                <label class="field">
+                  <span>SKU1_JANコード <span class="optional-badge">任意</span></span>
+                  <input id="sku1Jan" type="text" maxlength="100" inputmode="numeric" placeholder="例: 4901234567890">
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card section-card">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Step 3</p>
+            <h2>入力値を検証する</h2>
+          </div>
+          <p>全レコードをまとめて検証します。エラーがある商品番号が分かるように表示します。</p>
+        </div>
+        <div class="action-row">
+          <button id="validateButton" type="button" class="secondary-button">全件チェック</button>
+        </div>
+        <div id="validationSummary" class="summary summary-info">まだ検証していません。</div>
+        <div class="validation-grid">
+          <section class="validation-card error-card">
+            <h3>エラー</h3>
+            <ul id="errorList" class="issue-list"></ul>
+          </section>
+        </div>
+      </section>
+
+      <section class="card section-card">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Step 4</p>
+            <h2>CSV をダウンロードする</h2>
+          </div>
+          <p>検証後、文字コードを選んで複数レコードの CSV を出力します。</p>
+        </div>
+        <div class="encoding-box">
+          <div class="encoding-head">
+            <strong>出力文字コード</strong>
+            <span id="encodingStatus">文字コード: S-JIS（Windows向け推奨）</span>
+          </div>
+          <div class="encoding-options">
+            <label class="radio-field">
+              <input type="radio" name="encodingMode" value="sjis" checked>
+              <span>S-JIS（推奨）</span>
+            </label>
+            <label class="radio-field">
+              <input type="radio" name="encodingMode" value="utf8bom">
+              <span>UTF-8 BOM付き</span>
+            </label>
+          </div>
+          <p id="encodingNote" class="encoding-note">WindowsでメルカリShopsへアップロードする場合は、S-JISが推奨です。</p>
+        </div>
+        <div class="export-row">
+          <button id="downloadButton" type="button" class="primary-button">CSVダウンロード</button>
+        </div>
+        <div class="code-summary">
+          <div class="code-item"><strong>出力件数</strong><span id="recordCountView"></span></div>
+          <div class="code-item"><strong>選択中カテゴリID</strong><span id="categoryCodeView"></span></div>
+          <div class="code-item"><strong>選択中ブランドID</strong><span id="brandCodeView"></span></div>
+          <div class="code-item"><strong>選択中文字コード</strong><span id="encodingModeView"></span></div>
+        </div>
+        <textarea id="csvPreview" class="preview-textarea" rows="14" readonly></textarea>
+      </section>
+
+      <section class="card section-card">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">補助表示</p>
+            <h2>内部オブジェクト</h2>
+          </div>
+          <div class="section-actions">
+            <p>複数レコードの内部状態を JSON で確認できます。LocalStorage に自動保存されます。</p>
+            <button id="clearStorageButton" type="button" class="ghost-button">保存データを全削除</button>
+          </div>
+        </div>
+        <details class="debug-details">
+          <summary>JSONを表示する</summary>
+          <textarea id="jsonPreview" class="preview-textarea" rows="18" readonly></textarea>
+        </details>
+      </section>
+    </main>
+  </div>
+
+  <script src="encoding-japanese.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
