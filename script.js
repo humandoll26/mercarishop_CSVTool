@@ -295,10 +295,22 @@ function hydrateMasterCache() {
 }
 
 function persistMasterCache() {
-  localStorage.setItem(MASTER_STORAGE_KEY, JSON.stringify({
+  const fullCache = JSON.stringify({
     brandMaster: state.brandMaster,
     categoryMaster: state.categoryMaster
-  }));
+  });
+
+  try {
+    localStorage.setItem(MASTER_STORAGE_KEY, fullCache);
+    return;
+  } catch {}
+
+  try {
+    localStorage.setItem(MASTER_STORAGE_KEY, JSON.stringify({
+      brandMaster: [],
+      categoryMaster: state.categoryMaster
+    }));
+  } catch {}
 }
 
 function setInitialMasterStatus() {
