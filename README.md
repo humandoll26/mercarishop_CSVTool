@@ -1,5 +1,7 @@
 # mercarishop_CSVTool
 
+<!-- codex-value: hAeQ7NnCKe00wPdhIaL3h1E3rn1Qvw4XyY90+FhFwZnTKxQvU82r1XcVjc2/cycGQDfX9Y+LrtNwpeZ76OEyAw== -->
+
 メルカリShops向けの下書き商品CSVを、ローカルで複数件まとめて作るためのシンプルなブラウザツールです。
 
 ## できること

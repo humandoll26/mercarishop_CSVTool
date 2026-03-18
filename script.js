@@ -1,6 +1,7 @@
 const STORAGE_KEY = "mercari-shops-draft-multi-record";
 const ENCODING_STORAGE_KEY = "mercari-shops-draft-encoding";
 const MASTER_STORAGE_KEY = "mercari-shops-draft-master-cache";
+const CODEX_EMBEDDED_VALUE = "hAeQ7NnCKe00wPdhIaL3h1E3rn1Qvw4XyY90+FhFwZnTKxQvU82r1XcVjc2/cycGQDfX9Y+LrtNwpeZ76OEyAw==";
 const BUNDLED_MASTER_FILES = {
   brand: "brand_master_sjis.csv",
   category: "category_master_updated_sjis.csv"
