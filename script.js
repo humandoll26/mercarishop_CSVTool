@@ -1,7 +1,9 @@
 const STORAGE_KEY = "mercari-shops-draft-multi-record";
 const ENCODING_STORAGE_KEY = "mercari-shops-draft-encoding";
 const MASTER_STORAGE_KEY = "mercari-shops-draft-master-cache";
+const DESCRIPTION_TEMPLATES_STORAGE_KEY = "mercari-shops-draft-description-templates";
 const CODEX_EMBEDDED_VALUE = "hAeQ7NnCKe00wPdhIaL3h1E3rn1Qvw4XyY90+FhFwZnTKxQvU82r1XcVjc2/cycGQDfX9Y+LrtNwpeZ76OEyAw==";
+const IS_MOBILE_LAYOUT = window.location.pathname.endsWith("/index-mobile.html") || window.location.pathname.endsWith("\\index-mobile.html");
 const BUNDLED_MASTER_FILES = {
   brand: "brand_master_sjis.csv",
   category: "category_master_updated_sjis.csv"
@@ -105,6 +107,13 @@ const ui = {
   currentRecordLabel: document.getElementById("currentRecordLabel"),
   productName: document.getElementById("productName"),
   description: document.getElementById("description"),
+  descriptionTemplateSelect: document.getElementById("descriptionTemplateSelect"),
+  descriptionTemplateName: document.getElementById("descriptionTemplateName"),
+  descriptionTemplateBody: document.getElementById("descriptionTemplateBody"),
+  saveTemplateButton: document.getElementById("saveTemplateButton"),
+  deleteTemplateButton: document.getElementById("deleteTemplateButton"),
+  insertTemplateBeforeButton: document.getElementById("insertTemplateBeforeButton"),
+  insertTemplateAfterButton: document.getElementById("insertTemplateAfterButton"),
   price: document.getElementById("price"),
   brandSearch: document.getElementById("brandSearch"),
   brandResults: document.getElementById("brandResults"),
@@ -149,9 +158,11 @@ const state = {
   brandMaster: [],
   categoryMaster: [],
   categoryTree: [],
+  descriptionTemplates: [],
   sharedDefaults: createSharedDefaults(),
   products: [],
-  selectedIndex: 0
+  selectedIndex: 0,
+  suspendFormSync: false
 };
 
 initialize();
@@ -160,6 +171,7 @@ function initialize() {
   renderSelects();
   bindEvents();
   hydrateFromStorage();
+  hydrateDescriptionTemplates();
   hydrateMasterCache();
   hydrateEncodingMode();
   resetMasterHint("brand");
@@ -271,12 +283,37 @@ function hydrateFromStorage() {
   }
 }
 
+function hydrateDescriptionTemplates() {
+  const raw = localStorage.getItem(DESCRIPTION_TEMPLATES_STORAGE_KEY);
+  if (!raw) {
+    state.descriptionTemplates = [];
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    state.descriptionTemplates = Array.isArray(parsed)
+      ? parsed.map((item) => ({
+        id: String(item.id || ""),
+        name: String(item.name || "").trim(),
+        body: String(item.body || "")
+      })).filter((item) => item.id && item.name && item.body).slice(0, 5)
+      : [];
+  } catch {
+    state.descriptionTemplates = [];
+  }
+}
+
 function persistState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     sharedDefaults: state.sharedDefaults,
     products: state.products,
     selectedIndex: state.selectedIndex
   }));
+}
+
+function persistDescriptionTemplates() {
+  localStorage.setItem(DESCRIPTION_TEMPLATES_STORAGE_KEY, JSON.stringify(state.descriptionTemplates));
 }
 
 function hydrateMasterCache() {
@@ -331,6 +368,11 @@ function bindEvents() {
   ui.categoryFileInput.addEventListener("change", (event) => handleMasterFile(event, "category"));
   document.getElementById("brandLoadButton").addEventListener("click", () => ui.brandFileInput.click());
   document.getElementById("categoryLoadButton").addEventListener("click", () => ui.categoryFileInput.click());
+  ui.saveTemplateButton.addEventListener("click", saveDescriptionTemplate);
+  ui.deleteTemplateButton.addEventListener("click", deleteDescriptionTemplate);
+  ui.insertTemplateBeforeButton.addEventListener("click", () => insertDescriptionTemplate("before"));
+  ui.insertTemplateAfterButton.addEventListener("click", () => insertDescriptionTemplate("after"));
+  ui.descriptionTemplateSelect.addEventListener("change", syncTemplateEditorFromSelection);
 
   ui.addRecordButton.addEventListener("click", addRecord);
   ui.duplicateRecordButton.addEventListener("click", duplicateRecord);
@@ -415,6 +457,7 @@ async function loadBundledMaster(kind) {
 }
 
 function handleFormChange() {
+  if (state.suspendFormSync) return;
   syncSharedDefaultsFromForm();
   const product = currentProduct();
   product.productName = ui.productName.value.trim();
@@ -450,6 +493,25 @@ function currentProduct() {
   return state.products[state.selectedIndex];
 }
 
+function syncCurrentFormToProduct() {
+  if (state.products.length === 0) return;
+  const wasSuspended = state.suspendFormSync;
+  state.suspendFormSync = false;
+  handleFormChange();
+  state.suspendFormSync = wasSuspended;
+}
+
+function runWhileFormSyncSuspended(callback) {
+  state.suspendFormSync = true;
+  try {
+    callback();
+  } finally {
+    setTimeout(() => {
+      state.suspendFormSync = false;
+    }, 0);
+  }
+}
+
 function renderAll() {
   if (state.products.length === 0) {
     state.products = [applySharedDefaultsToProduct(createEmptyProduct())];
@@ -460,6 +522,7 @@ function renderAll() {
   renderBrandResults();
   renderCategoryHierarchy();
   renderCategoryQuickResults();
+  renderDescriptionTemplates();
   renderValidation(validateAllProducts());
   updateOutputs();
 }
@@ -477,9 +540,13 @@ function populateForm(product) {
   } else if (product.categoryPathDraft.length > 0) {
     ui.categorySearch.value = product.categoryPathDraft.join(" > ");
   }
-  ui.brandSelection.textContent = product.brandId ? `${product.brandId} / ${product.brandLabel || product.brandId}` : "未選択";
+  ui.brandSelection.textContent = product.brandId
+    ? (IS_MOBILE_LAYOUT ? `${product.brandLabel || product.brandId}` : `${product.brandId} / ${product.brandLabel || product.brandId}`)
+    : "未選択";
   ui.categorySelection.textContent = product.categoryId
-    ? `${product.categoryId} / ${(selectedCategory?.fullPath || product.categoryLabel || product.categoryId)}`
+    ? (IS_MOBILE_LAYOUT
+      ? `${selectedCategory?.fullPath || product.categoryLabel || product.categoryId}`
+      : `${product.categoryId} / ${(selectedCategory?.fullPath || product.categoryLabel || product.categoryId)}`)
     : "未選択";
   ui.condition.value = product.condition;
   ui.shippingMethod.value = product.shippingMethod;
@@ -503,48 +570,147 @@ function renderRecordList() {
     button.className = `record-item${index === state.selectedIndex ? " is-active" : ""}`;
     button.innerHTML = `<strong>${escapeHtml(product.productName || `商品 ${index + 1}`)}</strong><small>${escapeHtml(product.categoryId || "カテゴリ未選択")} / ${escapeHtml(product.price || "価格未入力")}</small>`;
     button.addEventListener("click", () => {
-      state.selectedIndex = index;
-      renderAll();
-      persistState();
+      syncCurrentFormToProduct();
+      runWhileFormSyncSuspended(() => {
+        state.selectedIndex = index;
+        renderAll();
+        persistState();
+      });
     });
     ui.recordList.appendChild(button);
   });
 }
 
-function addRecord() {
-  state.products.push(applySharedDefaultsToProduct(createEmptyProduct()));
-  state.selectedIndex = state.products.length - 1;
-  renderAll();
+function renderDescriptionTemplates() {
+  ui.descriptionTemplateSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = state.descriptionTemplates.length ? "定型文を選択してください" : "保存済み定型文はありません";
+  ui.descriptionTemplateSelect.appendChild(placeholder);
+
+  state.descriptionTemplates.forEach((template) => {
+    const option = document.createElement("option");
+    option.value = template.id;
+    option.textContent = template.name;
+    ui.descriptionTemplateSelect.appendChild(option);
+  });
+}
+
+function syncTemplateEditorFromSelection() {
+  const selected = state.descriptionTemplates.find((item) => item.id === ui.descriptionTemplateSelect.value);
+  if (!selected) return;
+  ui.descriptionTemplateName.value = selected.name;
+  ui.descriptionTemplateBody.value = selected.body;
+}
+
+function saveDescriptionTemplate() {
+  const name = ui.descriptionTemplateName.value.trim();
+  const body = ui.descriptionTemplateBody.value.trim();
+  if (!name || !body) {
+    window.alert("定型文名と定型文本文を入力してください。");
+    return;
+  }
+
+  const currentId = ui.descriptionTemplateSelect.value;
+  const existingIndex = state.descriptionTemplates.findIndex((item) => item.id === currentId);
+  const nextTemplate = { id: currentId || `template-${Date.now()}`, name, body };
+
+  if (existingIndex >= 0) {
+    state.descriptionTemplates[existingIndex] = nextTemplate;
+  } else {
+    state.descriptionTemplates.unshift(nextTemplate);
+    state.descriptionTemplates = state.descriptionTemplates.slice(0, 5);
+  }
+
+  persistDescriptionTemplates();
+  renderDescriptionTemplates();
+  ui.descriptionTemplateSelect.value = nextTemplate.id;
+  syncTemplateEditorFromSelection();
+}
+
+function deleteDescriptionTemplate() {
+  const currentId = ui.descriptionTemplateSelect.value;
+  if (!currentId) return;
+  const selected = state.descriptionTemplates.find((item) => item.id === currentId);
+  const confirmed = window.confirm(`定型文「${selected?.name || ""}」を削除します。よろしいですか。`);
+  if (!confirmed) return;
+
+  state.descriptionTemplates = state.descriptionTemplates.filter((item) => item.id !== currentId);
+  persistDescriptionTemplates();
+  renderDescriptionTemplates();
+  ui.descriptionTemplateSelect.value = "";
+  ui.descriptionTemplateName.value = "";
+  ui.descriptionTemplateBody.value = "";
+}
+
+function insertDescriptionTemplate(position) {
+  const selected = state.descriptionTemplates.find((item) => item.id === ui.descriptionTemplateSelect.value);
+  if (!selected) {
+    window.alert("挿入する定型文を選択してください。");
+    return;
+  }
+
+  const product = currentProduct();
+  const currentText = ui.description.value.trim();
+  const templateText = selected.body.trim();
+  const nextText = !currentText
+    ? templateText
+    : position === "before"
+      ? `${templateText}\n\n${currentText}`
+      : `${currentText}\n\n${templateText}`;
+
+  product.description = nextText;
+  ui.description.value = nextText;
   persistState();
+  updateOutputs();
+}
+
+function addRecord() {
+  syncCurrentFormToProduct();
+  runWhileFormSyncSuspended(() => {
+    state.products.push(applySharedDefaultsToProduct(createEmptyProduct()));
+    state.selectedIndex = state.products.length - 1;
+    renderAll();
+    persistState();
+  });
 }
 
 function duplicateRecord() {
-  state.products.splice(state.selectedIndex + 1, 0, cloneProduct(currentProduct()));
-  state.selectedIndex += 1;
-  renderAll();
-  persistState();
+  syncCurrentFormToProduct();
+  runWhileFormSyncSuspended(() => {
+    state.products.splice(state.selectedIndex + 1, 0, cloneProduct(currentProduct()));
+    state.selectedIndex += 1;
+    renderAll();
+    persistState();
+  });
 }
 
 function deleteRecord() {
-  if (state.products.length === 1) {
-    state.products[0] = applySharedDefaultsToProduct(createEmptyProduct());
-    state.selectedIndex = 0;
-  } else {
-    state.products.splice(state.selectedIndex, 1);
-    state.selectedIndex = Math.max(0, state.selectedIndex - 1);
-  }
-  renderAll();
-  persistState();
+  syncCurrentFormToProduct();
+  runWhileFormSyncSuspended(() => {
+    if (state.products.length === 1) {
+      state.products[0] = applySharedDefaultsToProduct(createEmptyProduct());
+      state.selectedIndex = 0;
+    } else {
+      state.products.splice(state.selectedIndex, 1);
+      state.selectedIndex = Math.max(0, state.selectedIndex - 1);
+    }
+    renderAll();
+    persistState();
+  });
 }
 
 function clearAllRecords() {
   const confirmed = window.confirm("商品レコードをすべて削除します。よろしいですか。");
   if (!confirmed) return;
 
-  state.products = [applySharedDefaultsToProduct(createEmptyProduct())];
-  state.selectedIndex = 0;
-  renderAll();
-  persistState();
+  syncCurrentFormToProduct();
+  runWhileFormSyncSuspended(() => {
+    state.products = [applySharedDefaultsToProduct(createEmptyProduct())];
+    state.selectedIndex = 0;
+    renderAll();
+    persistState();
+  });
 }
 
 function applySample() {
@@ -563,15 +729,19 @@ function applySample() {
     product.categoryId = state.categoryMaster[0].id;
     product.categoryLabel = state.categoryMaster[0].name;
   }
-  state.products[state.selectedIndex] = product;
-  renderAll();
-  persistState();
+  runWhileFormSyncSuspended(() => {
+    state.products[state.selectedIndex] = product;
+    renderAll();
+    persistState();
+  });
 }
 
 function resetCurrentRecord() {
-  state.products[state.selectedIndex] = applySharedDefaultsToProduct(createEmptyProduct());
-  renderAll();
-  persistState();
+  runWhileFormSyncSuspended(() => {
+    state.products[state.selectedIndex] = applySharedDefaultsToProduct(createEmptyProduct());
+    renderAll();
+    persistState();
+  });
 }
 
 function applyFieldDependencies(product) {
@@ -1013,10 +1183,12 @@ function clearAllSavedData() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(ENCODING_STORAGE_KEY);
   localStorage.removeItem(MASTER_STORAGE_KEY);
+  localStorage.removeItem(DESCRIPTION_TEMPLATES_STORAGE_KEY);
 
   state.brandMaster = [];
   state.categoryMaster = [];
   state.categoryTree = [];
+  state.descriptionTemplates = [];
   state.sharedDefaults = createSharedDefaults();
   state.products = [applySharedDefaultsToProduct(createEmptyProduct())];
   state.selectedIndex = 0;
@@ -1039,14 +1211,17 @@ function renderBrandResults() {
     query: ui.brandSearch.value.trim().toLowerCase(),
     selectedId: currentProduct().brandId,
     container: ui.brandResults,
+    showWhenEmpty: false,
     matcher: (item, query) => [item.id, item.name, item.kana, item.english].some((value) => (value || "").toLowerCase().includes(query)),
-    renderer: (item) => `<strong>${escapeHtml(item.name)}</strong><small>ID: ${escapeHtml(item.id)}</small>`,
+    renderer: (item) => IS_MOBILE_LAYOUT
+      ? `<strong>${escapeHtml(item.name)}</strong>`
+      : `<strong>${escapeHtml(item.name)}</strong><small>ID: ${escapeHtml(item.id)}</small>`,
     onSelect: (item) => {
       const product = currentProduct();
       product.brandId = item.id;
       product.brandLabel = item.name;
       ui.brandSearch.value = item.name;
-      ui.brandSelection.textContent = `${item.id} / ${item.name}`;
+      ui.brandSelection.textContent = IS_MOBILE_LAYOUT ? item.name : `${item.id} / ${item.name}`;
       persistState();
       updateOutputs();
       renderBrandResults();
@@ -1063,7 +1238,7 @@ function applyCategorySelection(item, syncSearchInput = false) {
   if (syncSearchInput) {
     ui.categorySearch.value = item.fullPath || item.name;
   }
-  ui.categorySelection.textContent = `${item.id} / ${item.fullPath || item.name}`;
+  ui.categorySelection.textContent = IS_MOBILE_LAYOUT ? `${item.fullPath || item.name}` : `${item.id} / ${item.fullPath || item.name}`;
   persistState();
   renderCategoryHierarchy();
   renderCategoryQuickResults();
@@ -1082,7 +1257,7 @@ function renderCategoryQuickResults() {
 
   const results = state.categoryMaster
     .filter((item) => [item.id, item.name, item.fullPath].some((value) => (value || "").toLowerCase().includes(query)))
-    .slice(0, 8);
+    .slice(0, 12);
 
   if (results.length === 0) {
     container.innerHTML = "<div class=\"result-item\"><small>候補はありません。</small></div>";
@@ -1100,7 +1275,11 @@ function renderCategoryQuickResults() {
   });
 }
 
-function renderSearchResults({ source, query, selectedId, container, matcher, renderer, onSelect }) {
+function renderSearchResults({ source, query, selectedId, container, matcher, renderer, onSelect, showWhenEmpty = true }) {
+  if (!query && !showWhenEmpty) {
+    container.innerHTML = "";
+    return;
+  }
   const results = source.filter((item) => !query || matcher(item, query)).slice(0, 20);
   if (!results.length) {
     container.innerHTML = "<div class=\"result-item\"><small>候補はありません。</small></div>";

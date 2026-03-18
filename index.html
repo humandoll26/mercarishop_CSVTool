@@ -68,6 +68,38 @@
                 <span>商品説明</span>
                 <textarea id="description" rows="5" maxlength="3000" placeholder="商品の説明を入力"></textarea>
               </label>
+              <details class="template-card template-details span-4">
+                <summary class="template-summary">
+                  <span>定型文挿入</span>
+                  <small>商品説明によく使う文を保存して、前後に挿入できます。</small>
+                </summary>
+                <div class="template-body">
+                  <div class="template-controls">
+                    <label class="field">
+                      <span>保存済み定型文</span>
+                      <select id="descriptionTemplateSelect"></select>
+                    </label>
+                    <div class="template-action-row">
+                      <button id="insertTemplateBeforeButton" type="button" class="secondary-button">前に挿入</button>
+                      <button id="insertTemplateAfterButton" type="button" class="secondary-button">後ろに挿入</button>
+                      <button id="deleteTemplateButton" type="button" class="ghost-button">削除</button>
+                    </div>
+                  </div>
+                  <div class="template-editor">
+                    <label class="field">
+                      <span>定型文名</span>
+                      <input id="descriptionTemplateName" type="text" maxlength="40" placeholder="例: 発送について">
+                    </label>
+                    <label class="field">
+                      <span>定型文本文</span>
+                      <textarea id="descriptionTemplateBody" rows="4" maxlength="1200" placeholder="例: ご購入後2〜3日以内に発送します。"></textarea>
+                    </label>
+                    <div class="template-action-row">
+                      <button id="saveTemplateButton" type="button" class="secondary-button">定型文を保存</button>
+                    </div>
+                  </div>
+                </div>
+              </details>
 
               <div class="search-card span-2">
                 <div class="search-head">
