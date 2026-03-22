@@ -401,6 +401,56 @@ button, input, textarea, select { font: inherit; }
   line-height: 1.6;
   resize: vertical;
 }
+
+.customize-card {
+  display: grid;
+  gap: 12px;
+}
+
+.customize-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customize-card-head h2 {
+  font-size: 1.12rem;
+}
+
+.customize-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.customize-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--info-bg);
+  border: 1px solid var(--info-line);
+  color: var(--info-text);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
+.customize-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.customize-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
 .debug-details {
   display: grid;
   gap: 12px;
@@ -438,4 +488,5 @@ button, input, textarea, select { font: inherit; }
   .form-grid, .sku-inline-grid, .validation-grid, .code-summary { grid-template-columns: 1fr; }
   .span-2, .span-4 { grid-column: span 1; }
   .section-actions, .action-row, .export-row, .records-toolbar, .inline-tools, .template-controls, .template-editor, .template-action-row { flex-direction: column; align-items: stretch; }
+  .customize-actions { flex-direction: column; }
 }
